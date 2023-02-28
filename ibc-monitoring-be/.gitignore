@@ -1,0 +1,25 @@
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Mac custom attributes file (Desktop Service Store)
+.DS_Store
+
+# Database files
+data
+
+# credentials and SSL certificates
+*.env
+*~
+*.pem
+*.csv
+*.log
+*.jsond
+*.pkl
+
+# miscellaneous
+dataframes
+debug.log
+python/chains.json
+python/config.json

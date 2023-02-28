@@ -1,0 +1,17 @@
+{
+	"ux": {
+		"api_endpoint": "https://ux.eosusa.io",
+		"wraplock_accounts": ["ibc.wl.eos","ibc.wl.tlos","ibc.wl.wax"],
+		"wraptoken_accounts": ["ibc.wt.eos","ibc.wt.tlos","ibc.wt.wax"]
+	},
+	"eos": {
+		"api_endpoint": "https://eos.eosusa.io",
+		"wraplock_accounts": ["ibc.wl.ux","ibc.wl.tlos","ibc.wl.wax"],
+		"wraptoken_accounts": ["ibc.wt.ux","ibc.wt.tlos","ibc.wt.wax"]
+	},
+	"tlos": {
+		"api_endpoint": "https://telos.eosusa.io",
+		"wraplock_accounts": ["ibc.wl.ux","ibc.wl.eos","ibc.wl.wax"],
+		"wraptoken_accounts": ["ibc.wt.ux","ibc.wt.eos","ibc.wt.wax"]
+	}
+}

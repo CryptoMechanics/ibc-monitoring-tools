@@ -1,0 +1,46 @@
+version: '3.3'
+
+services:
+
+  api:
+    restart: always
+    build: ./python
+    image: antelope/ibc-monitor-python:1
+    volumes:
+      - ./python:/usr/src/app
+    env_file:
+      - ./config.env
+    command: ["uvicorn", "src.api:app", "--host", "0.0.0.0", "--reload", "--reload-dir", "src"]
+    ports:
+      - "8000:8000"
+    depends_on:
+      - database
+
+  indexer:
+    build: ./python
+    image: antelope/ibc-monitor-python:1
+    volumes:
+      - ./python:/usr/src/app
+      - ./data/state:/data
+      - ./chains.json:/usr/src/app/chains.json
+    env_file:
+      - ./config.env
+    command: ["python", "-u", "src/indexer.py"]
+    depends_on:
+      - database
+
+  database:
+    restart: always
+    image: "postgres:11.3"
+    env_file:
+      - ./config.env
+    volumes:
+      - ./data/actions:/var/lib/postgresql/data
+
+  adminer:
+    image: adminer
+    restart: always
+    ports:
+      - 9999:8080
+    depends_on:
+      - database

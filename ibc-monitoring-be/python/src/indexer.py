@@ -663,23 +663,19 @@ class MatchingThread(threading.Thread):
             for index, row in df_unmatched.iterrows():
                 # as long as source API is up, destination should never have unmatched proofs
                 if indexer_health_statuses[row['source_chain']]['status'] == 'UP':
+                    destination_link_prefix = self.chains[row['destination_chain']]['block_explorer_tx_link_prefix']
                     message = f"Unmatched Proof Detected!\n"
-                    message += f"No lock detected on: {row['source_chain']}\n"
-                    message += f"Unmatched proof detected on: {row['destination_chain']}\n"
-                    message += f"Transaction: {row['tx']}\n"
-                    message += f"Amount: {row['quantity']} {row['contract']} {row['symbol']}\n"
-                    message += f"Owner: {row['owner']}\n"
-                    message += f"Beneficiary: {row['beneficiary']}\n"
+                    message += f"[Transaction on {row['destination_chain'].upper()}]({destination_link_prefix}{row['tx']})\n"
                     logging.critical(message)
                     accounting_alert.send(message)
 
             # send telegram alerts for successful transfers with discrepancies
             for index, row in df_matched_with_discrepancies.iterrows():
-                message = f"Successful Transfer with Discrepancies Detected!\n"
-                message += f"Locked on: {row['source_chain']}\n"
-                message += f"Lock Transaction: {row['source_tx']}\n"
-                message += f"Proved on: {row['destination_chain']}\n"
-                message += f"Proof Transaction: {row['destination_tx']}\n"
+                source_link_prefix = self.chains[row['source_chain']]['block_explorer_tx_link_prefix']
+                destination_link_prefix = self.chains[row['destination_chain']]['block_explorer_tx_link_prefix']
+                message = f"Transfer with Discrepancies Detected!\n"
+                message += f"[Transaction on {row['source_chain'].upper()}]({source_link_prefix}{row['source_tx']})\n"
+                message += f"[Transaction on {row['destination_chain'].upper()}]({destination_link_prefix}{row['destination_tx']})\n"
                 logging.critical(message)
                 accounting_alert.send(message)
 

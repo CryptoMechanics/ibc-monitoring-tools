@@ -7,9 +7,7 @@ It periodically matches the actions between chains to determine any instances wh
 1) There has been an issue, withdraw or cancel action - requiring a proof - without a corresponding event on the source chain
 2) The corresponding source and destination actions have different owner, beneficiary or quantity values
 
-In such an event, it triggers a discrepancy notification as follows:
-
-*(to be decided)*
+In either event, it sends a discrepancy alert to the designated telegram group/channel.
 
 It also presents a basic HTTP API for viewing the matched and unmatched actions:
 
@@ -18,7 +16,7 @@ It also presents a basic HTTP API for viewing the matched and unmatched actions:
 /transfers-summary?fmt=html&start=2023-02-08T00:00:00&end=2023-02-09T00:00:00
 ```
 
-Complete API documentation may be found at `/docs`
+Complete API documentation may be found at `/docs` once deployed.
 
 ### Quickstart
 
@@ -45,6 +43,10 @@ ACTION_COLLECTION_REPOPULATION_QUERY_INTERVAL_SECONDS - how often to poll Hyperi
 MATCHING_START_TIME - chain date/time (e.g. yyyy-mm-dd) at which to start matching actions and checks for discrepancies
 MATCHING_INTERVAL_SECONDS=5 - how often to carry out the action matching process
 
+TELEGRAM_ALERT_BOT_KEY - telegram bot key used to send the discrepancy alerts
+TELEGRAM_ACCOUNTING_ALERT_CHAT_ID - the chat_id for the telegram group/channel to send token accounting alerts
+TELEGRAM_TECHNICAL_ALERT_CHAT_ID - the chat_id for the telegram group/channel to send technical alerts (API outages etc.)
+
 LOGGING_LEVEL - `DEBUG`, `INFO` or `ERROR` depending on the level of detail
 ```
 
@@ -52,5 +54,4 @@ The `chains.json` file stores the details of the Hyperion API endpoints for each
 
 ### TODO
 
-- add appropriate notification code using websockets, telegram, etc.
-  - check that there there can never be false positives for such discrepancies
+- check that there there can never be false positives for discrepancy alerts

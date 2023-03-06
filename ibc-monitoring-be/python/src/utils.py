@@ -168,11 +168,11 @@ class TelegramNotifier:
     :param logging: An instance of the logging module for error reporting.
     """
 
-    def __init__(self, bot_key: str, chat_id: int, duplicates_suppressed_seconds:int = 10, logging: object) -> None:
+    def __init__(self, bot_key: str, chat_id: int, logging: object, duplicates_suppressed_seconds:int = 10) -> None:
         self.bot_key = bot_key
         self.chat_id = chat_id
-        self.logging = logging
         self.duplicates_suppressed_seconds = duplicates_suppressed_seconds
+        self.logging = logging
         self.recent_messages = deque(maxlen=10)
 
     def check_add_message_to_recent_list(self, markdown: str) -> bool:
@@ -201,6 +201,7 @@ class TelegramNotifier:
                 base_url = f'https://api.telegram.org/bot{self.bot_key}/sendMessage'
                 data = {'chat_id': self.chat_id, 'parse_mode': 'markdown', 'disable_web_page_preview': 'true', 'text': markdown}
                 requests.post(base_url, data=data, timeout=10).json()
+                self.logging.info(f'Sent Telegram message: {markdown}')
             return True
         except Exception as e:
             self.logging.error(f'Could not send Telegram message: {e}')

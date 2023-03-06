@@ -19,6 +19,7 @@ import pandas as pd
 
 # project imports
 from utils import myencode, unpack_emitxfer_action, xfer_data_to_dict, save_dataframe, save_json, prepare_data_folder
+from utils import TelegramNotifier
 
 pd.options.display.max_columns = None
 pd.options.display.float_format = '{:.8f}'.format
@@ -32,6 +33,9 @@ ACTION_COLLECTION_QUERY_INTERVAL_SECONDS = int(os.getenv('ACTION_COLLECTION_QUER
 ACTION_COLLECTION_REPOPULATION_QUERY_INTERVAL_SECONDS = int(os.getenv('ACTION_COLLECTION_REPOPULATION_QUERY_INTERVAL_SECONDS', 5))
 MATCHING_START_TIME = parser.parse(os.getenv('MATCHING_START_TIME', '2023-01-01'))
 MATCHING_INTERVAL_SECONDS = int(os.getenv('MATCHING_INTERVAL_SECONDS', 5))
+TELEGRAM_ALERT_BOT_KEY=os.getenv('TELEGRAM_ALERT_BOT_KEY', None)
+TELEGRAM_ACCOUNTING_ALERT_CHAT_ID=int(os.getenv('TELEGRAM_ACCOUNTING_ALERT_CHAT_ID', 0))
+TELEGRAM_TECHNICAL_ALERT_CHAT_ID=int(os.getenv('TELEGRAM_TECHNICAL_ALERT_CHAT_ID', 0))
 LOGGING_LEVEL = os.getenv('LOGGING_LEVEL', 'INFO').upper()
 
 KEEP_RUNNING = True
@@ -498,6 +502,21 @@ class MatchingThread(threading.Thread):
 
         time.sleep(5)
         logging.info('Running %s' % type(self).__name__)
+
+        accounting_alert = TelegramNotifier(
+            bot_key=TELEGRAM_ALERT_BOT_KEY,
+            chat_id=TELEGRAM_ACCOUNTING_ALERT_CHAT_ID,
+            logging=logging,
+            duplicates_suppressed_seconds=30
+            )
+
+        technical_alert = TelegramNotifier(
+            bot_key=TELEGRAM_ALERT_BOT_KEY,
+            chat_id=TELEGRAM_TECHNICAL_ALERT_CHAT_ID,
+            logging=logging,
+            duplicates_suppressed_seconds=30
+            )
+
         while KEEP_RUNNING:
 
             start_time = time.time()
@@ -509,6 +528,7 @@ class MatchingThread(threading.Thread):
                 api_endpoint = self.chains[row['chain']]['api_endpoint']
                 if row['time'] < datetime.utcnow() - timedelta(minutes=2):
                     indexer_health_statuses[row['chain']] = {'status': 'DOWN', 'time': row['time'].to_pydatetime().isoformat(), 'reason': f'Data from {api_endpoint} has not been received in the last 2 minutes.'}
+                    technical_alert.send(f'Data from {api_endpoint} has not been received in the last 2 minutes.')
                 else:
                     if row['status'] != 'UP':
                         indexer_health_statuses[row['chain']] = {'status': 'DOWN', 'time': row['time'].to_pydatetime().isoformat(), 'reason': row['note']}
@@ -636,12 +656,32 @@ class MatchingThread(threading.Thread):
             save_dataframe('unmatched_proofs', df_unmatched)
             logging.debug('Saved unmatched_proofs dataframe')
 
-            # todo - if there are any unmatched proofs on chain pairs for which both health statuses are 'UP', issue notification(s)
-            #        and save warning json data
-
-
             end_time = time.time()
             logging.debug(f'Match took {end_time - start_time} seconds')
+
+            # send telegram alerts for proofs with no corresponding lock action
+            for index, row in df_unmatched.iterrows():
+                # as long as source API is up, destination should never have unmatched proofs
+                if indexer_health_statuses[row['source_chain']]['status'] == 'UP':
+                    message = f"Unmatched Proof Detected!\n"
+                    message += f"No lock detected on: {row['source_chain']}\n"
+                    message += f"Unmatched proof detected on: {row['destination_chain']}\n"
+                    message += f"Transaction: {row['tx']}\n"
+                    message += f"Amount: {row['quantity']} {row['contract']} {row['symbol']}\n"
+                    message += f"Owner: {row['owner']}\n"
+                    message += f"Beneficiary: {row['beneficiary']}\n"
+                    logging.critical(message)
+                    accounting_alert.send(message)
+
+            # send telegram alerts for successful transfers with discrepancies
+            for index, row in df_matched_with_discrepancies.iterrows():
+                message = f"Successful Transfer with Discrepancies Detected!\n"
+                message += f"Locked on: {row['source_chain']}\n"
+                message += f"Lock Transaction: {row['source_tx']}\n"
+                message += f"Proved on: {row['destination_chain']}\n"
+                message += f"Proof Transaction: {row['destination_tx']}\n"
+                logging.critical(message)
+                accounting_alert.send(message)
 
             time.sleep(self.interval_seconds)
 

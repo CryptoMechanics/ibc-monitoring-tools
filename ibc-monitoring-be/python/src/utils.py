@@ -3,8 +3,11 @@ import os
 import glob
 import hashlib
 import pickle
+from datetime import datetime, timedelta
+from collections import deque
 
 # external imports
+import requests
 import pandas as pd
 import simplejson as json
 from decimal import Decimal
@@ -154,3 +157,51 @@ def load_json(filename: str) -> object:
 
     with open(f"dataframes/{filename}.json", "r") as f:
         return json.load(f)
+
+class TelegramNotifier:
+    """
+    This class represents a Telegram notifier that sends messages to a specified chat using a Telegram bot.
+
+    :param bot_key: The API key of the Telegram bot.
+    :param chat_id: The chat ID of the Telegram chat.
+    :param duplicates_suppressed_seconds: The number of seconds to suppress duplicate messages.
+    :param logging: An instance of the logging module for error reporting.
+    """
+
+    def __init__(self, bot_key: str, chat_id: int, duplicates_suppressed_seconds:int = 10, logging: object) -> None:
+        self.bot_key = bot_key
+        self.chat_id = chat_id
+        self.logging = logging
+        self.duplicates_suppressed_seconds = duplicates_suppressed_seconds
+        self.recent_messages = deque(maxlen=10)
+
+    def check_add_message_to_recent_list(self, markdown: str) -> bool:
+        """
+        This method checks if a message is a duplicate and if not, adds it to the recent messages list.
+
+        :param markdown: The message to check and add to the list.
+        :return: True if the message was added to the list, False otherwise.
+        """
+        for tm, message in self.recent_messages:
+            if tm > datetime.utcnow() - timedelta(seconds=self.duplicates_suppressed_seconds):
+                if message == markdown:
+                    return False
+        self.recent_messages.append((datetime.utcnow(), markdown))
+        return True
+
+    def send(self, markdown: str) -> bool:
+        """
+        This method sends a message to the Telegram chat using the Telegram bot.
+
+        :param markdown: The message to send.
+        :return: True if the message was sent successfully (or supressed as duplicate), False otherwise.
+        """
+        try:
+            if self.check_add_message_to_recent_list(markdown):
+                base_url = f'https://api.telegram.org/bot{self.bot_key}/sendMessage'
+                data = {'chat_id': self.chat_id, 'parse_mode': 'markdown', 'disable_web_page_preview': 'true', 'text': markdown}
+                requests.post(base_url, data=data, timeout=10).json()
+            return True
+        except Exception as e:
+            self.logging.error(f'Could not send Telegram message: {e}')
+            return False

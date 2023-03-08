@@ -685,7 +685,7 @@ class MatchingThread(threading.Thread):
             save_dataframe('outstanding_transfers', df_outstanding)
             logging.debug('Saved outstanding_transfers dataframe')
 
-            # UNMATCHED PROOFS (none should exist if matching from start!)
+            # UNMATCHED PROOFS (none should exist if all actions were collected!)
             dfs = []
             for chain in self.chains.keys():
                 query = f"""

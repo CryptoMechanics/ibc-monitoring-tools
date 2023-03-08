@@ -4,6 +4,7 @@ import logging
 import json, typing
 from datetime import datetime, timedelta
 from decimal import Decimal
+from dateutil import parser
 
 # external library imports
 import simplejson as json
@@ -15,10 +16,14 @@ from fastapi.middleware.cors import CORSMiddleware
 # project imports
 from src.utils import load_dataframe, load_json
 
+ACTION_COLLECTION_START_TIME = parser.parse(os.getenv('ACTION_COLLECTION_START_TIME', '2023-01-01'))
+MATCHING_START_TIME = parser.parse(os.getenv('MATCHING_START_TIME', '2023-01-01'))
+LOGGING_LEVEL = os.getenv('LOGGING_LEVEL', 'INFO').upper()
+
 # logging configuration
 logging.basicConfig(
-	level=logging.DEBUG,
-	format='%(asctime)s %(levelname)s %(message)s',
+	level=LOGGING_LEVEL,
+	format='%(asctime)s - %(levelname)s - %(message)s',
 	datefmt='%Y-%m-%d %H:%M:%S'
 )
 
@@ -44,7 +49,7 @@ tags_metadata = [
 ]
 
 app = FastAPI(
-    title="IBC Monitor API",
+    title="Antelope IBC Token Monitor API",
     version="0.1",
     openapi_tags=tags_metadata
 )
@@ -57,19 +62,161 @@ app = FastAPI(
 #     allow_headers=["*"],
 # )
 
-@app.get('/', tags=["General Data"], response_class=PrettyJSONResponse)
+@app.get('/', tags=['Default Page'])
 async def index():
 	"""
-	TODO: Basic UI - scope TBD
+	Simple page to summarise the status of monitoring and provide links to other pages.
 	"""
 
-	return 'TODO: Basic UI - scope TBD'
+	try:
+		indexer_health_statuses = load_json('indexer_health_status')
+		indexer_problem = 'DOWN' in [v['status'] for k,v in indexer_health_statuses.items()]
+
+		df_successful_transfers = load_dataframe('successful_transfers')
+		df_outstanding_transfers = load_dataframe('outstanding_transfers')
+		df_unmatched_proofs = load_dataframe('unmatched_proofs')
+		df_successful_transfers_with_discrepancies = load_dataframe('successful_transfers_with_discrepancies')
+	except FileNotFoundError as e:
+		return HTTPException(status_code=404, detail="Please wait for data indexing to finish.")
+
+	# make summary dataframes
+	df_successful_transfers_summary = df_successful_transfers.groupby(by=['source_chain', 'destination_chain', 'source_action', 'symbol']).agg({'quantity': 'sum', 'symbol': 'size'})
+	df_successful_transfers_summary = df_successful_transfers_summary.rename(columns={'symbol': 'count'})
+
+	df_outstanding_transfers_summary = df_outstanding_transfers.groupby(by=['source_chain', 'destination_chain', 'source_action', 'symbol']).agg({'quantity': 'sum', 'symbol': 'size'})
+	df_outstanding_transfers_summary = df_outstanding_transfers_summary.rename(columns={'symbol': 'count'})
+
+	new_index = df_successful_transfers_summary.index.union(df_outstanding_transfers_summary.index)
+	df_successful_transfers_summary = df_successful_transfers_summary.reindex(index=new_index).fillna(0)
+	df_outstanding_transfers_summary = df_outstanding_transfers_summary.reindex(index=new_index).fillna(0)
+
+	df_successful_transfers_ratio_summary = df_successful_transfers_summary / (df_successful_transfers_summary + df_outstanding_transfers_summary)
+
+	html1 = ''
+	if indexer_problem:
+		html1 += '<h2>One or more action indexers has a problem which may invalidate the data below</h2>'
+		html1 += f'<code>{indexer_health_statuses}</code>'
+	if len(df_unmatched_proofs.index) > 0:
+		html1 += '<h2>Unmatched Proofs</h2>'
+		html1 += df_unmatched_proofs.to_html(index=True) + '<br>'
+	else:
+		html1 += '<h2>No Unmatched Proofs Detected</h2>'
+	if len(df_successful_transfers_with_discrepancies.index) > 0:
+		html1 += '<h2>Transfers with Proof Discrepancies</h2>'
+		html1 += df_successful_transfers_with_discrepancies.to_html(index=True) + '<br>'
+	else:
+		html1 += '<h2>No Proof Discrepancies Detected</h2>'
+
+	html2 = ''
+	if len(df_successful_transfers_summary.index) > 0:
+		df_successful_transfers_summary['quantity'] = df_successful_transfers_summary['quantity'].apply(lambda x: '{:,.4f}'.format(x))
+		df_successful_transfers_summary['count'] = df_successful_transfers_summary['count'].apply(lambda x: str(int(x)))
+		html2 += '<h2>Successful Transfers Summary</h2>'
+		html2 += df_successful_transfers_summary.to_html(index=True, float_format='{:.4f}'.format) + '<br>'
+	else:
+		html2 += '<h2>No Successful Transfers</h2>'
+
+	html3 = ''
+	if len(df_outstanding_transfers_summary.index) > 0:
+		df_outstanding_transfers_summary['quantity'] = df_outstanding_transfers_summary['quantity'].apply(lambda x: '{:,.4f}'.format(x))
+		df_outstanding_transfers_summary['count'] = df_outstanding_transfers_summary['count'].apply(lambda x: str(int(x)))
+		html3 += '<h2>Outstanding Transfers Summary</h2>'
+		html3 += df_outstanding_transfers_summary.to_html(index=True) + '<br>'
+	else:
+		html3 += '<h2>No Outstanding Transfers</h2>'
+
+	html4 = ''
+	if len(df_successful_transfers_ratio_summary.index) > 0:
+		html4 += '<h2>Transfer Success Ratios</h2>'
+		html4 += df_successful_transfers_ratio_summary.to_html(index=True, float_format='{:.1%}'.format) + '<br>'
+
+	outer_html = """
+	<html>
+		<head>
+			<title>Antelope IBC Token Monitor</title>
+			<meta name="description" content="">
+			<style>
+				body {
+					font-family: Arial, sans-serif;
+					background-color: #f1f1f1;
+				}
+				h1 {
+					padding-top: 10px;
+					color: #333;
+					text-align: center;
+				}
+				.mydata {
+					text-align: center;
+					font-size: 16px;
+					line-height: 1.5;
+					color: #333;
+					padding: 10px;
+					background-color: #fff;
+					box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+					border-radius: 5px;
+					margin: 20px auto;
+					max-width: 800px
+				}
+				.mydata h2 {
+					font-size: 16px;
+				}
+				.dataframe {
+					margin: 0 auto;
+					halign: center;
+				}
+				.mydata .dataframe {
+					text-align: right;
+				}
+				table {
+					color: #333;
+					border-collapse: collapse;
+				}
+				td {
+					border: 1px solid black;
+					padding: 2px;
+				}
+				th {
+					border: 1px solid black;
+					padding: 4px;
+				}
+				.note {
+					text-align: center;
+					padding: 3px;
+					font-size: 14px;
+				}
+			</style>
+		</head>
+		<body>
+			<h1>Antelope IBC Token Monitor</h1>
+			<div class="mydata">
+				""" + html1 + """
+			</div>
+			<div class="mydata">
+				""" + html2 + """
+			</div>
+			<div class="mydata">
+				""" + html3 + """
+			</div>
+			<div class="mydata">
+				""" + html4 + """
+			</div>
+			<div class="note">ACTION_COLLECTION_START_TIME: """ + str(ACTION_COLLECTION_START_TIME) + """</div>
+			<div class="note">MATCHING_START_TIME: """ + str(MATCHING_START_TIME) + """</div>
+			<div class="note" style="margin-top:8px">
+				<a href="/docs" target="_blank">Full OpenAPI Documentation</a>
+			</div>
+			<br>
+		</body>
+	</html>
+	"""
+
+	return HTMLResponse(outer_html)
 
 
 @app.get('/indexer-health-status', tags=["General Data"], response_class=PrettyJSONResponse)
 async def indexer_health_status(fmt: str = 'json'):
 	"""
-	Retreives data about the health of the action indexers.
+	Provides info about whether each action indexer is UP or DOWN, and when it was last checked.
 
 	Args:
 	- fmt: Optional string indicating the format of the response, either 'json' or 'html'.
@@ -101,6 +248,13 @@ async def indexer_health_status(fmt: str = 'json'):
 async def transfers(start: datetime = None, end: datetime = None, fmt: str = 'json'):
 	"""
 	Retrieves raw data related to IBC token transfers.
+
+	There are different sections for:
+	- indexer health status
+	- transfers that have been completed successfully
+	- transfers which have been initiated, but not proven on the destination chain
+	- any actions on the destination chain which does not have an originating source action (spurious proofs)
+	- any transfers which have been matched, but whose details don't match between source of destination chain (spurious proofs)
 
 	Args:
 	- start: Optional datetime object representing the start of the date range to filter by.
@@ -157,10 +311,10 @@ async def transfers(start: datetime = None, end: datetime = None, fmt: str = 'js
 		else:
 			html += '<h2>No Unmatched Proofs Detected</h2>'
 		if len(df_successful_transfers_with_discrepancies.index) > 0:
-			html += '<h2>Successful Transfers with Discrepancies</h2>'
+			html += '<h2>Transfers with Proof Discrepancies</h2>'
 			html += df_successful_transfers_with_discrepancies.to_html(index=True) + '<br>'
 		else:
-			html += '<h2>No Successful Transfers with Discrepancies Detected</h2>'
+			html += '<h2>No Proof Discrepancies Detected</h2>'
 		html += '<h2>Successful Transfers</h2>'
 		html += df_successful_transfers.to_html(index=True) + '<br>'
 		html += '<h2>Outstanding Transfers</h2>'
@@ -171,6 +325,13 @@ async def transfers(start: datetime = None, end: datetime = None, fmt: str = 'js
 async def transfers_summary(start: datetime = None, end: datetime = None, fmt: str = 'json'):
 	"""
 	Retrieves summary data related to IBC token transfers.
+
+	There are different sections for:
+	- indexer health status
+	- transfers that have been completed successfully
+	- transfers which have been initiated, but not proven on the destination chain
+	- any actions on the destination chain which does not have an originating source action (spurious proofs)
+	- any transfers which have been matched, but whose details don't match between source of destination chain (spurious proofs)
 
 	Args:
 	- start: Optional datetime object representing the start of the date range to filter by.
@@ -238,10 +399,10 @@ async def transfers_summary(start: datetime = None, end: datetime = None, fmt: s
 		else:
 			html += '<h2>No Unmatched Proofs Detected</h2>'
 		if len(df_successful_transfers_with_discrepancies.index) > 0:
-			html += '<h2>Successful Transfers with Discrepancies</h2>'
+			html += '<h2>Transfers with Proof Discrepancies</h2>'
 			html += df_successful_transfers_with_discrepancies.to_html(index=True) + '<br>'
 		else:
-			html += '<h2>No Successful Transfers with Discrepancies Detected</h2>'
+			html += '<h2>No Proof Discrepancies Detected</h2>'
 		if len(df_successful_transfers_summary.index) > 0:
 			df_successful_transfers_summary['quantity'] = df_successful_transfers_summary['quantity'].apply(lambda x: '{:,.4f}'.format(x))
 			df_successful_transfers_summary['count'] = df_successful_transfers_summary['count'].apply(lambda x: str(int(x)))

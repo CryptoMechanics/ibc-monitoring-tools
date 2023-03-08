@@ -243,18 +243,73 @@ async def indexer_health_status(fmt: str = 'json'):
 			html += f'<code>{indexer_health_statuses}</code>'
 		return HTMLResponse(html)
 
+@app.get('/discrepancies', tags=["General Data"], response_class=PrettyJSONResponse)
+async def discrepancies(start: datetime = None, end: datetime = None, fmt: str = 'json'):
+	"""
+	Returns information about important source/destination action discrepancies.
+
+	Args:
+	- fmt: Optional string indicating the format of the response, either 'json' or 'html'.
+
+	Returns: A JSON or HTML response containing the data, depending on the value of *fmt*.
+	- A object containing the status of each action indexer - whether they are Up or DOWN, and the time last queried.
+	- A list of records corresponding to proofs that have succeeded on the destination chain(s), but don't have a corresponding locking action on the source chain(s).
+	- A list of records corresponding to transfers whose locking action on the source chain didn't match the corresponding unlocking action on the destination chain.
+	"""
+
+	indexer_health_statuses = load_json('indexer_health_status')
+	df_unmatched_proofs = load_dataframe('unmatched_proofs')
+	df_matched_with_discrepancies = load_dataframe('successful_transfers_with_discrepancies')
+
+	if start:
+		df_unmatched_proofs = df_unmatched_proofs[df_unmatched_proofs['time'] >= start]
+		df_matched_with_discrepancies = df_matched_with_discrepancies[df_matched_with_discrepancies['time'] >= start]
+
+	if end:
+		df_unmatched_proofs = df_unmatched_proofs[df_unmatched_proofs['time'] < end]
+		df_matched_with_discrepancies = df_matched_with_discrepancies[df_matched_with_discrepancies['time'] < end]
+
+	unmatched_proofs_data = []
+	for index, row in df_unmatched_proofs.iterrows():
+		# as long as source API is up, destination should never have unmatched proofs
+		if indexer_health_statuses[row['source_chain']]['status'] == 'UP':
+			unmatched_proofs_data.append(row)
+
+	discrepancy_transfers_data = []
+	for index, row in df_matched_with_discrepancies.iterrows():
+		discrepancy_transfers_data.append(row)
+
+	if fmt == 'json':
+		data = {
+			'indexer_health_statuses': indexer_health_statuses,
+			'transfers_with_discrepancies': discrepancy_transfers_data,
+			'unmatched_proofs': unmatched_proofs_data
+		}
+		return data
+	# else:
+	# 	html = ''
+	# 	if len(unmatched_data) > 0:
+	# 		html += '<h2>Unmatched Proofs</h2>'
+	# 		html += df_unmatched_proofs.to_html(index=True) + '<br>'
+	# 	else:
+	# 		html += '<h2>No Unmatched Proofs Detected</h2>'
+	# 	if len(df_successful_transfers_with_discrepancies.index) > 0:
+	# 		html += '<h2>Transfers with Discrepancies</h2>'
+	# 		html += df_successful_transfers_with_discrepancies.to_html(index=True) + '<br>'
+	# 	else:
+	# 		html += '<h2>No Transfers with Discrepancies Detected</h2>'
+	# 	return HTMLResponse(html)
+
 
 @app.get('/transfers', tags=["General Data"], response_class=PrettyJSONResponse)
 async def transfers(start: datetime = None, end: datetime = None, fmt: str = 'json'):
 	"""
-	Retrieves raw data related to IBC token transfers.
+	Retrieves raw data related to IBC token transfers, both complete and partial.
 
 	There are different sections for:
 	- indexer health status
 	- transfers that have been completed successfully
 	- transfers which have been initiated, but not proven on the destination chain
-	- any actions on the destination chain which does not have an originating source action (spurious proofs)
-	- any transfers which have been matched, but whose details don't match between source of destination chain (spurious proofs)
 
 	Args:
 	- start: Optional datetime object representing the start of the date range to filter by.
@@ -271,33 +326,22 @@ async def transfers(start: datetime = None, end: datetime = None, fmt: str = 'js
 
 		df_successful_transfers = load_dataframe('successful_transfers')
 		df_outstanding_transfers = load_dataframe('outstanding_transfers')
-		df_unmatched_proofs = load_dataframe('unmatched_proofs')
-		df_successful_transfers_with_discrepancies = load_dataframe('successful_transfers_with_discrepancies')
 	except FileNotFoundError as e:
 		return HTTPException(status_code=404, detail="This data could not be found. It may not yet have been generated.")
 
 	if start:
 		df_successful_transfers = df_successful_transfers[df_successful_transfers['source_time'] >= start]
-		df_successful_transfers_with_discrepancies = df_successful_transfers_with_discrepancies[df_successful_transfers_with_discrepancies['source_time'] >= start]
 		df_outstanding_transfers = df_outstanding_transfers[df_outstanding_transfers['time'] >= start]
-		df_unmatched_proofs = df_unmatched_proofs[df_unmatched_proofs['time'] >= start]
 
 	if end:
 		df_successful_transfers = df_successful_transfers[df_successful_transfers['source_time'] < end]
-		df_successful_transfers_with_discrepancies = df_successful_transfers_with_discrepancies[df_successful_transfers_with_discrepancies['source_time'] < end]
 		df_outstanding_transfers = df_outstanding_transfers[df_outstanding_transfers['time'] < end]
-		df_unmatched_proofs = df_unmatched_proofs[df_unmatched_proofs['time'] < end]
-
-	# df_successful_transfers = df_successful_transfers.applymap(lambda x: x.strftime("%Y-%m-%dT%H:%M:%SZ") if isinstance(x, pd.Timestamp) else x)
-	# df_outstanding_transfers = df_outstanding_transfers.applymap(lambda x: x.strftime("%Y-%m-%dT%H:%M:%SZ") if isinstance(x, pd.Timestamp) else x)
 
 	if fmt == 'json':
 		data = {
 			'indexer_health_statuses': indexer_health_statuses,
 			'successful_transfers': df_successful_transfers.to_dict(orient='records'),
-			'successful_transfers_with_discrepancies': df_successful_transfers_with_discrepancies.to_dict(orient='records'),
 			'outstanding_transfers': df_outstanding_transfers.to_dict(orient='records'),
-			'unmatched_proofs': df_unmatched_proofs.to_dict(orient='records')
 		}
 		return data
 	else:
@@ -305,16 +349,6 @@ async def transfers(start: datetime = None, end: datetime = None, fmt: str = 'js
 		if indexer_problem:
 			html += '<h2>One or more action indexers has a problem which may invalidate the data below</h2>'
 			html += f'<code>{indexer_health_statuses}</code>'
-		if len(df_unmatched_proofs.index) > 0:
-			html += '<h2>Unmatched Proofs</h2>'
-			html += df_unmatched_proofs.to_html(index=True) + '<br>'
-		else:
-			html += '<h2>No Unmatched Proofs Detected</h2>'
-		if len(df_successful_transfers_with_discrepancies.index) > 0:
-			html += '<h2>Transfers with Proof Discrepancies</h2>'
-			html += df_successful_transfers_with_discrepancies.to_html(index=True) + '<br>'
-		else:
-			html += '<h2>No Proof Discrepancies Detected</h2>'
 		html += '<h2>Successful Transfers</h2>'
 		html += df_successful_transfers.to_html(index=True) + '<br>'
 		html += '<h2>Outstanding Transfers</h2>'
@@ -324,14 +358,12 @@ async def transfers(start: datetime = None, end: datetime = None, fmt: str = 'js
 @app.get('/transfers-summary', tags=["General Data"], response_class=PrettyJSONResponse)
 async def transfers_summary(start: datetime = None, end: datetime = None, fmt: str = 'json'):
 	"""
-	Retrieves summary data related to IBC token transfers.
+	Retrieves summary data related to IBC token transfers, both complete and partial.
 
 	There are different sections for:
 	- indexer health status
 	- transfers that have been completed successfully
 	- transfers which have been initiated, but not proven on the destination chain
-	- any actions on the destination chain which does not have an originating source action (spurious proofs)
-	- any transfers which have been matched, but whose details don't match between source of destination chain (spurious proofs)
 
 	Args:
 	- start: Optional datetime object representing the start of the date range to filter by.
@@ -348,22 +380,16 @@ async def transfers_summary(start: datetime = None, end: datetime = None, fmt: s
 
 		df_successful_transfers = load_dataframe('successful_transfers')
 		df_outstanding_transfers = load_dataframe('outstanding_transfers')
-		df_unmatched_proofs = load_dataframe('unmatched_proofs')
-		df_successful_transfers_with_discrepancies = load_dataframe('successful_transfers_with_discrepancies')
 	except FileNotFoundError as e:
 		return HTTPException(status_code=404, detail="This data could not be found. It may not yet have been generated.")
 
 	if start:
 		df_successful_transfers = df_successful_transfers[df_successful_transfers['source_time'] >= start]
-		df_successful_transfers_with_discrepancies = df_successful_transfers_with_discrepancies[df_successful_transfers_with_discrepancies['source_time'] >= start]
 		df_outstanding_transfers = df_outstanding_transfers[df_outstanding_transfers['time'] >= start]
-		df_unmatched_proofs = df_unmatched_proofs[df_unmatched_proofs['time'] >= start]
 
 	if end:
 		df_successful_transfers = df_successful_transfers[df_successful_transfers['source_time'] < end]
-		df_successful_transfers_with_discrepancies = df_successful_transfers_with_discrepancies[df_successful_transfers_with_discrepancies['source_time'] < end]
 		df_outstanding_transfers = df_outstanding_transfers[df_outstanding_transfers['time'] < end]
-		df_unmatched_proofs = df_unmatched_proofs[df_unmatched_proofs['time'] < end]
 
 	# make summary dataframes
 	df_successful_transfers_summary = df_successful_transfers.groupby(by=['source_chain', 'destination_chain', 'source_action', 'symbol']).agg({'quantity': 'sum', 'symbol': 'size'})
@@ -381,8 +407,6 @@ async def transfers_summary(start: datetime = None, end: datetime = None, fmt: s
 	if fmt == 'json':
 		data = {
 			'indexer_health_statuses': indexer_health_statuses,
-			'unmatched_proofs': df_unmatched_proofs.to_dict(orient='records'),
-			'successful_transfers_with_discrepancies': df_successful_transfers_with_discrepancies.to_dict(orient='records'),
 			'successful_transfers_summary': df_successful_transfers_summary.reset_index().to_dict(orient='records'),
 			'outstanding_transfers_summary': df_outstanding_transfers_summary.reset_index().to_dict(orient='records'),
 			'df_successful_transfers_ratio_summary': df_successful_transfers_ratio_summary.reset_index().to_dict(orient='records')
@@ -393,16 +417,6 @@ async def transfers_summary(start: datetime = None, end: datetime = None, fmt: s
 		if indexer_problem:
 			html += '<h2>One or more action indexers has a problem which may invalidate the data below</h2>'
 			html += f'<code>{indexer_health_statuses}</code>'
-		if len(df_unmatched_proofs.index) > 0:
-			html += '<h2>Unmatched Proofs</h2>'
-			html += df_unmatched_proofs.to_html(index=True) + '<br>'
-		else:
-			html += '<h2>No Unmatched Proofs Detected</h2>'
-		if len(df_successful_transfers_with_discrepancies.index) > 0:
-			html += '<h2>Transfers with Proof Discrepancies</h2>'
-			html += df_successful_transfers_with_discrepancies.to_html(index=True) + '<br>'
-		else:
-			html += '<h2>No Proof Discrepancies Detected</h2>'
 		if len(df_successful_transfers_summary.index) > 0:
 			df_successful_transfers_summary['quantity'] = df_successful_transfers_summary['quantity'].apply(lambda x: '{:,.4f}'.format(x))
 			df_successful_transfers_summary['count'] = df_successful_transfers_summary['count'].apply(lambda x: str(int(x)))

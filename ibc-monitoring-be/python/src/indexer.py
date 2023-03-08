@@ -626,10 +626,11 @@ class MatchingThread(threading.Thread):
                 api_endpoint = self.chains[row['chain']]['api_endpoint']
                 if row['time'] < datetime.utcnow() - timedelta(minutes=2):
                     indexer_health_statuses[row['chain']] = {'status': 'DOWN', 'time': row['time'].to_pydatetime().isoformat(), 'reason': f'Data from {api_endpoint} has not been received in the last 2 minutes.'}
-                    technical_alert.send(f'Data from {api_endpoint} has not been received in the last 2 minutes.')
+                    technical_alert.send(f'IBC Monitor: Data from {api_endpoint} has not been received in the last 2 minutes.')
                 else:
                     if row['status'] != 'UP':
                         indexer_health_statuses[row['chain']] = {'status': 'DOWN', 'time': row['time'].to_pydatetime().isoformat(), 'reason': row['note']}
+                        technical_alert.send(f"IBC Monitor: {row['note']}")
                     else:
                         indexer_health_statuses[row['chain']] = {'status': 'UP', 'time': row['time'].to_pydatetime().isoformat()}
 

@@ -374,9 +374,11 @@ class ActionCollectionThread(threading.Thread):
                         contract varchar,
                         symbol varchar,
                         quantity numeric(20, 8),
-                        xfer_global_sequence_id bigint
+                        xfer_global_sequence_id bigint,
+                        excluded_matched boolean DEFAULT FALSE
                     );
                 CREATE INDEX IF NOT EXISTS {self.base_table_name}_idx_1 ON {self.base_table_name} (xfer_global_sequence_id, source_chain, destination_chain);
+                CREATE INDEX IF NOT EXISTS {self.base_table_name}_idx_2 ON {self.base_table_name} (excluded_matched, xfer_global_sequence_id, source_chain, destination_chain);
                 """)
             self.pg_conn.commit()
             logging.info('Created data tables if not present.')
@@ -490,6 +492,101 @@ class MatchingThread(threading.Thread):
         self.interval_seconds = interval_seconds
         self.indexer_health_monitor = indexer_health_monitor
 
+    def match_to_df(self) -> pd.DataFrame:
+        """
+        The method the carries out the main cross chain matching query and returns a dataframe.
+
+        :return: The pandas dataframe corresponding to the database table join.
+
+        """
+        dfs = []
+        for source_chain in self.chains.keys():
+            for destination_chain in self.chains.keys():
+                if source_chain != destination_chain:
+                    query = f"""
+                        SELECT  s.source_chain,
+                                s.action source_action,
+                                s.time source_time,
+                                s.destination_chain,
+                                d.action destination_action,
+                                d.time destination_time,
+                                s.owner,
+                                s.beneficiary,
+                                s.quantity,
+                                s.contract,
+                                s.symbol,
+                                d.owner d_owner,
+                                d.beneficiary d_beneficiary,
+                                d.quantity d_quantity,
+                                d.contract d_contract,
+                                d.symbol d_symbol,
+                                s.tx source_tx,
+                                d.tx destination_tx,
+                                s.global_sequence_id source_gid,
+                                d.global_sequence_id destination_gid,
+                                CASE
+                                    WHEN s.owner = d.owner
+                                    AND s.beneficiary = d.beneficiary
+                                    AND s.quantity = d.quantity
+                                    AND s.contract = d.contract
+                                    AND s.symbol = d.symbol
+                                    THEN true ELSE false END AS "xfer_match"
+                        FROM actions_{source_chain} s INNER JOIN actions_{destination_chain} d
+                        ON s.xfer_global_sequence_id = d.xfer_global_sequence_id
+                        WHERE s.source_chain = d.source_chain AND s.destination_chain = d.destination_chain
+                        AND (s.action = 'lock' OR s.action = 'retire')
+                        AND (s.excluded_matched = false AND d.excluded_matched = false)
+                        ORDER BY s.time;
+                    """
+
+                    df = pd.read_sql(query, self.pg_conn, parse_dates=['time_s', 'time_d'])
+                    dfs.append(df)
+
+        df_matched = pd.concat(dfs)
+        df_matched = df_matched.sort_values(by='source_time', ascending=True).reset_index(drop=True)
+
+        return df_matched
+
+    def check_mark_old_database_records_as_matched(self, df_matched: pd.DataFrame) -> bool:
+        """
+        The method updates matching table records prior to the matching start_time, marking them as matched.
+
+        :param df_matched: The pandas dataframe corresponding to the database table join.
+        :return: True if any records were marked as matched.
+
+        """
+        df_matched_old = df_matched[df_matched['source_time'] < self.start_time]
+
+        matches_marked = False
+
+        source_gid_list = df_matched_old.groupby('source_chain')['source_gid'].apply(list).to_dict()
+        for chain, gids in source_gid_list.items():
+            logging.debug(f'Marking the following database records as matched for {chain}')
+            logging.debug(gids)
+            if len(gids) > 0:
+                global_sequence_ids = ",".join(str(x) for x in gids)
+                self.pg_cur.execute(f"""
+                    UPDATE actions_{chain} SET excluded_matched = true
+                        WHERE global_sequence_id IN  ({global_sequence_ids});
+                    """)
+                self.pg_conn.commit()
+                matches_marked = True
+
+        destination_gid_list = df_matched_old.groupby('destination_chain')['destination_gid'].apply(list).to_dict()
+        for chain, gids in destination_gid_list.items():
+            logging.debug(f'Marking the following database records as matched for {chain}')
+            logging.debug(gids)
+            if len(gids) > 0:
+                global_sequence_ids = ",".join(str(x) for x in gids)
+                self.pg_cur.execute(f"""
+                    UPDATE actions_{chain} SET excluded_matched = true
+                        WHERE global_sequence_id IN  ({global_sequence_ids});
+                    """)
+                self.pg_conn.commit()
+                matches_marked = True
+
+        return matches_marked
+
     def run(self) -> None:
         """
         The method that runs the matching process. It performs the matching every `interval_seconds` seconds,
@@ -517,6 +614,7 @@ class MatchingThread(threading.Thread):
             duplicates_suppressed_seconds=30
             )
 
+
         while KEEP_RUNNING:
 
             start_time = time.time()
@@ -539,51 +637,11 @@ class MatchingThread(threading.Thread):
             logging.debug('Saved indexer_health_statuses json')
 
             # MATCHED TRANSFERS
-            dfs = []
-            for source_chain in self.chains.keys():
-                for destination_chain in self.chains.keys():
-                    if source_chain != destination_chain:
-                        query = f"""
-                            SELECT  s.source_chain,
-                                    s.action source_action,
-                                    s.time source_time,
-                                    s.destination_chain,
-                                    d.action destination_action,
-                                    d.time destination_time,
-                                    s.owner,
-                                    s.beneficiary,
-                                    s.quantity,
-                                    s.contract,
-                                    s.symbol,
-                                    d.owner d_owner,
-                                    d.beneficiary d_beneficiary,
-                                    d.quantity d_quantity,
-                                    d.contract d_contract,
-                                    d.symbol d_symbol,
-                                    s.tx source_tx,
-                                    d.tx destination_tx,
-                                    s.global_sequence_id source_gid,
-                                    d.global_sequence_id destination_gid,
-                                    CASE
-                                        WHEN s.owner = d.owner
-                                        AND s.beneficiary = d.beneficiary
-                                        AND s.quantity = d.quantity
-                                        AND s.contract = d.contract
-                                        AND s.symbol = d.symbol
-                                        THEN true ELSE false END AS "xfer_match"
-                            FROM actions_{source_chain} s INNER JOIN actions_{destination_chain} d
-                            ON s.xfer_global_sequence_id = d.xfer_global_sequence_id
-                            WHERE s.time >= '{self.start_time}' AND d.time >= '{self.start_time}'
-                            AND s.source_chain = d.source_chain AND s.destination_chain = d.destination_chain
-                            AND (s.action = 'lock' OR s.action = 'retire')
-                            ORDER BY s.time;
-                        """
+            df_matched = self.match_to_df()
 
-                        df = pd.read_sql(query, self.pg_conn, parse_dates=['time_s', 'time_d'])
-                        dfs.append(df)
+            if self.check_mark_old_database_records_as_matched(df_matched):
+                df_matched = self.match_to_df() # if new match marks were made, fetch dataframe again
 
-            df_matched = pd.concat(dfs)
-            df_matched = df_matched.sort_values(by='source_time', ascending=True).reset_index(drop=True)
             df_matched_with_discrepancies = df_matched[df_matched['xfer_match'] == False]
             if len(df_matched_with_discrepancies.index) > 0:
                 df_matched = df_matched[df_matched['xfer_match'] == True]
@@ -614,6 +672,7 @@ class MatchingThread(threading.Thread):
                     WHERE time >= '{self.start_time}'
                     AND (NOT a.xfer_global_sequence_id = ANY(%s))
                     AND (a.action = 'lock' OR a.action = 'retire')
+                    AND excluded_matched = false
                     ORDER BY a.time;
                 """       
 
@@ -645,6 +704,7 @@ class MatchingThread(threading.Thread):
                     AND (NOT a.xfer_global_sequence_id = ANY(%s))
                     AND (a.action = 'withdrawa' OR a.action = 'issuea' OR a.action = 'cancela'
                       OR a.action = 'withdrawb' OR a.action = 'issueb' OR a.action = 'cancelb')
+                    AND excluded_matched = false
                     ORDER BY a.time;
                 """
 

@@ -749,9 +749,15 @@ if __name__ == '__main__':
     # logging configuration
     logging.basicConfig(
         level=LOGGING_LEVEL,
-        format='%(asctime)s %(levelname)s %(message)s',
+        format='%(asctime)s - %(levelname)s - %(message)s',
         datefmt='%Y-%m-%d %H:%M:%S'
     )
+
+    # sanity check
+    if MATCHING_START_TIME < ACTION_COLLECTION_START_TIME:
+        logging.error('MATCHING_START_TIME must not be earlier than ACTION_COLLECTION_START_TIME in config.env')
+        time.sleep(1)
+        quit()
 
     # get chain actions data requirements
     with open('chains.json', 'r') as chains_file:

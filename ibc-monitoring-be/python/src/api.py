@@ -76,6 +76,10 @@ async def index():
 		df_outstanding_transfers = load_dataframe('outstanding_transfers')
 		df_unmatched_proofs = load_dataframe('unmatched_proofs')
 		df_successful_transfers_with_discrepancies = load_dataframe('successful_transfers_with_discrepancies')
+
+		# exclude proofs if source indexers are down
+		df_unmatched_proofs = df_unmatched_proofs[df_unmatched_proofs['source_chain'].apply(lambda x: indexer_health_statuses[x]['status']) == 'UP']
+
 	except FileNotFoundError as e:
 		return HTTPException(status_code=404, detail="Please wait for data indexing to finish.")
 
@@ -96,14 +100,15 @@ async def index():
 	if indexer_problem:
 		html1 += '<h2>One or more action indexers has a problem which may invalidate the data below</h2>'
 		html1 += f'<code>{indexer_health_statuses}</code>'
+
 	if len(df_unmatched_proofs.index) > 0:
-		html1 += '<h2>Unmatched Proofs</h2>'
-		html1 += df_unmatched_proofs.to_html(index=True) + '<br>'
+		html1 += '<h2><span style="color:red;font-size:20px">Unmatched Proofs</span></h2>'
+		html1 += '<a href="/discrepancies?fmt=html">More Details</a>'
 	else:
 		html1 += '<h2>No Unmatched Proofs Detected</h2>'
 	if len(df_successful_transfers_with_discrepancies.index) > 0:
-		html1 += '<h2>Transfers with Proof Discrepancies</h2>'
-		html1 += df_successful_transfers_with_discrepancies.to_html(index=True) + '<br>'
+		html1 += '<h2><span style="color:red;font-size:20px">Transfers with Proof Discrepancies</span></h2>'
+		html1 += '<a href="/discrepancies?fmt=html">More Details</a>'
 	else:
 		html1 += '<h2>No Proof Discrepancies Detected</h2>'
 
@@ -269,36 +274,29 @@ async def discrepancies(start: datetime = None, end: datetime = None, fmt: str =
 		df_unmatched_proofs = df_unmatched_proofs[df_unmatched_proofs['time'] < end]
 		df_matched_with_discrepancies = df_matched_with_discrepancies[df_matched_with_discrepancies['time'] < end]
 
-	unmatched_proofs_data = []
-	for index, row in df_unmatched_proofs.iterrows():
-		# as long as source API is up, destination should never have unmatched proofs
-		if indexer_health_statuses[row['source_chain']]['status'] == 'UP':
-			unmatched_proofs_data.append(row)
-
-	discrepancy_transfers_data = []
-	for index, row in df_matched_with_discrepancies.iterrows():
-		discrepancy_transfers_data.append(row)
+	# exclude proofs if source indexers are down
+	df_unmatched_proofs = df_unmatched_proofs[df_unmatched_proofs['source_chain'].apply(lambda x: indexer_health_statuses[x]['status']) == 'UP']
 
 	if fmt == 'json':
 		data = {
 			'indexer_health_statuses': indexer_health_statuses,
-			'transfers_with_discrepancies': discrepancy_transfers_data,
-			'unmatched_proofs': unmatched_proofs_data
+			'transfers_with_discrepancies': df_matched_with_discrepancies.to_dict(orient='records'),
+			'unmatched_proofs': df_unmatched_proofs.to_dict(orient='records')
 		}
 		return data
-	# else:
-	# 	html = ''
-	# 	if len(unmatched_data) > 0:
-	# 		html += '<h2>Unmatched Proofs</h2>'
-	# 		html += df_unmatched_proofs.to_html(index=True) + '<br>'
-	# 	else:
-	# 		html += '<h2>No Unmatched Proofs Detected</h2>'
-	# 	if len(df_successful_transfers_with_discrepancies.index) > 0:
-	# 		html += '<h2>Transfers with Discrepancies</h2>'
-	# 		html += df_successful_transfers_with_discrepancies.to_html(index=True) + '<br>'
-	# 	else:
-	# 		html += '<h2>No Transfers with Discrepancies Detected</h2>'
-	# 	return HTMLResponse(html)
+	else:
+		html = ''
+		if len(df_unmatched_proofs.index) > 0:
+			html += '<h2>Unmatched Proofs</h2>'
+			html += df_unmatched_proofs.to_html(index=True) + '<br>'
+		else:
+			html += '<h2>No Unmatched Proofs Detected</h2>'
+		if len(df_matched_with_discrepancies.index) > 0:
+			html += '<h2>Transfers with Discrepancies</h2>'
+			html += df_matched_with_discrepancies.to_html(index=True) + '<br>'
+		else:
+			html += '<h2>No Transfers with Discrepancies Detected</h2>'
+		return HTMLResponse(html)
 
 
 @app.get('/transfers', tags=["General Data"], response_class=PrettyJSONResponse)

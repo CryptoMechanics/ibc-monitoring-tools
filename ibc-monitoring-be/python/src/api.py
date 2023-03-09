@@ -65,7 +65,7 @@ app = FastAPI(
 @app.get('/', tags=['Default Page'])
 async def index():
 	"""
-	Simple page to summarise the status of monitoring and provide links to other pages.
+	A simple page to summarise the status of monitoring and provide links to other pages.
 	"""
 
 	try:
@@ -251,7 +251,7 @@ async def indexer_health_status(fmt: str = 'json'):
 @app.get('/discrepancies', tags=["General Data"], response_class=PrettyJSONResponse)
 async def discrepancies(start: datetime = None, end: datetime = None, fmt: str = 'json'):
 	"""
-	Returns information about important source/destination action discrepancies.
+	Provides info about important source/destination action discrepancies.
 
 	Args:
 	- fmt: Optional string indicating the format of the response, either 'json' or 'html'.
@@ -302,7 +302,7 @@ async def discrepancies(start: datetime = None, end: datetime = None, fmt: str =
 @app.get('/transfers', tags=["General Data"], response_class=PrettyJSONResponse)
 async def transfers(start: datetime = None, end: datetime = None, fmt: str = 'json'):
 	"""
-	Retrieves raw data related to IBC token transfers, both complete and partial.
+	Provides raw data related to IBC token transfers, both complete and partial.
 
 	There are different sections for:
 	- indexer health status
@@ -356,7 +356,7 @@ async def transfers(start: datetime = None, end: datetime = None, fmt: str = 'js
 @app.get('/transfers-summary', tags=["General Data"], response_class=PrettyJSONResponse)
 async def transfers_summary(start: datetime = None, end: datetime = None, fmt: str = 'json'):
 	"""
-	Retrieves summary data related to IBC token transfers, both complete and partial.
+	Provides summary data related to IBC token transfers, both complete and partial.
 
 	There are different sections for:
 	- indexer health status

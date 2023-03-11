@@ -217,11 +217,11 @@ class ActionCollectionThread(threading.Thread):
                     nodeos_head_time = parser.parse(response['health'][1]['service_data']['head_block_time'])
                     nodeos_head_block = int(response['health'][1]['service_data']['head_block_num'])
                     elasticsearch_last_indexed_block = int(response['health'][2]['service_data']['last_indexed_block'])
-                    if (datetime.utcnow() - nodeos_head_time) > timedelta(seconds=10):
-                        msg = f'Action data server {self.api_endpoint} head block is more than 10 seconds behind system time.'
+                    if (datetime.utcnow() - nodeos_head_time) > timedelta(seconds=15):
+                        msg = f'Action data server {self.api_endpoint} head block is more than 15 seconds behind system time.'
                         raise IndexerHealthException(msg)
                     if (nodeos_head_block - elasticsearch_last_indexed_block) > 10:
-                        msg = f'Action data server {self.api_endpoint} is more than 10 seconds out of sync.'
+                        msg = f'Action data server {self.api_endpoint} is more than 5 seconds out of sync.'
                         raise IndexerHealthException(msg)
 
                     logging.debug(f'Getting actions from Hyperion {self.api_endpoint} ...')

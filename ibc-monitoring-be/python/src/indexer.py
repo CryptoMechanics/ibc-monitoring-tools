@@ -104,7 +104,7 @@ class IndexerHealthMonitor:
         :param lib: The last irreversible block number.
         :param status: The status of the indexer (UP/DOWN).
         :param note: Additional notes about the indexer status.
-        :param error: Error message if applicable.
+        :param error: Error type if applicable.
         """
 
         with self.lock:
@@ -122,6 +122,12 @@ class IndexerHealthMonitor:
 
     def __del__(self):
         self.pg_conn.close()
+
+class IndexerHealthException(Exception):
+    """
+    A simple exception subclass for handling errors relating to problems accessing the Hyperion API.
+    """
+    pass
 
 class ActionCollectionThread(threading.Thread):
     """
@@ -198,6 +204,26 @@ class ActionCollectionThread(threading.Thread):
                     break
 
                 try:
+
+                    logging.debug(f'Checking health of Hyperion {self.api_endpoint} ...')
+                    response = requests.get(f'{self.api_endpoint}/v2/health', timeout=10)
+                    response = response.json()
+
+                    # handle errors from Hyperion API
+                    if 'error' in response:
+                        msg = f'Action data server {self.api_endpoint}: {response["message"]}'
+                        raise IndexerHealthException(msg)
+
+                    nodeos_head_time = parser.parse(response['health'][1]['service_data']['head_block_time'])
+                    nodeos_head_block = int(response['health'][1]['service_data']['head_block_num'])
+                    elasticsearch_last_indexed_block = int(response['health'][2]['service_data']['last_indexed_block'])
+                    if (datetime.utcnow() - nodeos_head_time) > timedelta(seconds=10):
+                        msg = f'Action data server {self.api_endpoint} head block is more than 10 seconds behind system time.'
+                        raise IndexerHealthException(msg)
+                    if (nodeos_head_block - elasticsearch_last_indexed_block) > 10:
+                        msg = f'Action data server {self.api_endpoint} is more than 10 seconds out of sync.'
+                        raise IndexerHealthException(msg)
+
                     logging.debug(f'Getting actions from Hyperion {self.api_endpoint} ...')
                     actions = []
                     for qi in range(self.cursor_scroll_count):
@@ -213,22 +239,36 @@ class ActionCollectionThread(threading.Thread):
                             params['filter'] = self.filter_param
                         response = requests.get(url, params=params, timeout=20)
                         response = response.json()
+
+                        # handle errors from Hyperion API
+                        if 'error' in response:
+                            msg = f'Action data server {self.api_endpoint}: {response["message"]}'
+                            raise IndexerHealthException(msg)
+
                         self.lib = response['lib']
                         actions += response['actions']
 
                         if len(actions) < self.row_limit - 20: # don't do more queries if few rows
                             break
 
-                except requests.exceptions.RequestException as e:
-                    self.indexer_health_monitor.update(chain=self.chain, lib=self.lib, status='DOWN', note=f'Action data server {self.api_endpoint} cannot be reached.', error=str(e))
-                    logging.info(f'Action data server {self.api_endpoint} cannot be reached.')
-                    logging.debug(e)
+                except IndexerHealthException as e:
+                    self.indexer_health_monitor.update(chain=self.chain, lib=self.lib, status='DOWN', note=str(e), error='Indexer Health Error')
+                    logging.info(e)
                     time.sleep(3)
                     continue
+
+                except requests.exceptions.RequestException as e:
+                    msg = f'Action data server {self.api_endpoint} cannot be reached.'
+                    self.indexer_health_monitor.update(chain=self.chain, lib=self.lib, status='DOWN', note=msg, error='Request Error')
+                    logging.info(msg)
+                    time.sleep(3)
+                    continue
+
                 except Exception as e:
-                    self.indexer_health_monitor.update(chain=self.chain, lib=self.lib, status='DOWN', note='Action data indexing problem.', error=str(e))
-                    logging.info(f'Action data indexing problem for chain {self.chain}')
-                    logging.debug(e)
+                    msg = f'Action data indexing problem for chain {self.chain}, check logs!'
+                    self.indexer_health_monitor.update(chain=self.chain, lib=self.lib, status='DOWN', note=msg, error='Unspecified Error')
+                    logging.info(msg)
+                    logging.debug(traceback.format_exc())
                     time.sleep(3)
                     continue
 

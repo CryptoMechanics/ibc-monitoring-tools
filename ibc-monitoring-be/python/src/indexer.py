@@ -200,8 +200,8 @@ class ActionCollectionThread(threading.Thread):
                     (self.last_irreversible_action_time, self.last_irreversible_global_sequence_id) = response
                     logging.debug(f'Last ireversible action time in {self.base_table_name}: {self.last_irreversible_action_time.strftime("%Y-%m-%dT%H:%M:%SZ")}')
                 except:
-                    logging.CRITICAL(traceback.format_exc())
-                    break
+                    logging.critical(traceback.format_exc())
+                    break # exit app
 
                 try:
 
@@ -334,10 +334,12 @@ class ActionCollectionThread(threading.Thread):
                         logging.error(f'Could not commit new Hyperion actions: {e}')
 
                 except Exception as e:
-                    logging.error(f'{e}\n{traceback.format_exc()}')
+                    logging.critical(f'{traceback.format_exc()}')
+                    break # exit app
 
             except Exception as e:
-                logging.error(f'{e}\n{traceback.format_exc()}')
+                logging.critical(f'{traceback.format_exc()}')
+                break # exit app
 
             if self.repopulating:
                 time.sleep(self.repopulate_query_interval_seconds)
@@ -486,12 +488,13 @@ class ActionCollectionThread(threading.Thread):
 
                     write_to_buffer(group_last_global_sequence_id, txid, timestamp, source_chain, destination_chain, atype, xfer.get('owner',''), xfer.get('beneficiary',''), xfer.get('contract',''), xfer.get('symbol', ''), xfer.get('quantity',''), xfer_global_sequence_id)
 
-        except:
-            print(traceback.format_exc())
+            if block_no <= self.lib:
+                self.new_irreversible_global_sequence_id = group_last_global_sequence_id
+                self.new_irreversible_action_time = timestamp
 
-        if block_no <= self.lib:
-            self.new_irreversible_global_sequence_id = group_last_global_sequence_id
-            self.new_irreversible_action_time = timestamp
+        except Exception as e:
+            logging.error(f"Error processing actions!")
+            logging.debug(traceback.format_exc())
 
 
     def updateFromActionsBuffers(self) -> None:

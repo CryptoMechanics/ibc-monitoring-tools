@@ -332,6 +332,7 @@ class ActionCollectionThread(threading.Thread):
                     except Exception as e:
                         self.pg_conn.rollback()
                         logging.error(f'Could not commit new Hyperion actions: {e}')
+                        logging.error(f'{traceback.format_exc()}')
 
                 except Exception as e:
                     logging.critical(f'{traceback.format_exc()}')

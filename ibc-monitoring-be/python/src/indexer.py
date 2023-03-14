@@ -60,13 +60,13 @@ class IndexerHealthMonitor:
 
         db_connection_ready = False
         while not db_connection_ready:
+            time.sleep(1)
             try:
                 self.pg_conn = psycopg2.connect(host="database", dbname=POSTGRES_DB, user=POSTGRES_USER, password=POSTGRES_PASSWORD)
                 self.pg_cur = self.pg_conn.cursor()
                 db_connection_ready = True
             except psycopg2.Error as e:
                 logging.debug(f"Error connecting to the database: {e}. Retrying...")
-                time.sleep(1)
 
         if clear_table:
             try:
@@ -172,6 +172,7 @@ class ActionCollectionThread(threading.Thread):
         # prepare database
         db_connection_ready = False
         while not db_connection_ready:
+            time.sleep(1)
             try:
                 self.pg_conn = psycopg2.connect(host="database", dbname=POSTGRES_DB, user=POSTGRES_USER, password=POSTGRES_PASSWORD)
                 self.pg_cur = self.pg_conn.cursor()
@@ -183,7 +184,6 @@ class ActionCollectionThread(threading.Thread):
                 db_connection_ready = True
             except psycopg2.Error as e:
                 logging.debug(f"Error connecting to the database: {e}. Retrying...")
-                time.sleep(1)
 
     def run(self) -> None:
         """
@@ -531,10 +531,19 @@ class MatchingThread(threading.Thread):
         super().__init__()
         self.chains = chains
         self.start_time = start_time
-        self.pg_conn = psycopg2.connect(host="database", dbname=POSTGRES_DB, user=POSTGRES_USER, password=POSTGRES_PASSWORD)
-        self.pg_cur = self.pg_conn.cursor()
         self.interval_seconds = interval_seconds
         self.indexer_health_monitor = indexer_health_monitor
+
+        db_connection_ready = False
+        while not db_connection_ready:
+            time.sleep(1)
+            try:
+                self.pg_conn = psycopg2.connect(host="database", dbname=POSTGRES_DB, user=POSTGRES_USER, password=POSTGRES_PASSWORD)
+                self.pg_conn.set_session(isolation_level='SERIALIZABLE')
+                self.pg_cur = self.pg_conn.cursor()
+                db_connection_ready = True
+            except psycopg2.Error as e:
+                logging.debug(f"Error connecting to the database: {e}. Retrying...")
 
     def match_to_df(self) -> pd.DataFrame:
         """
@@ -613,7 +622,6 @@ class MatchingThread(threading.Thread):
                     UPDATE actions_{chain} SET excluded_matched = true
                         WHERE global_sequence_id IN  ({global_sequence_ids});
                     """)
-                self.pg_conn.commit()
                 matches_marked = True
 
         destination_gid_list = df_matched_old.groupby('destination_chain')['destination_gid'].apply(list).to_dict()
@@ -626,7 +634,6 @@ class MatchingThread(threading.Thread):
                     UPDATE actions_{chain} SET excluded_matched = true
                         WHERE global_sequence_id IN  ({global_sequence_ids});
                     """)
-                self.pg_conn.commit()
                 matches_marked = True
 
         return matches_marked
@@ -641,7 +648,7 @@ class MatchingThread(threading.Thread):
             4. If there are any unmatched proofs on chain pairs for which both health statuses are 'UP', issue notifications and save warning data.
         """
 
-        time.sleep(5)
+        time.sleep(2)
         logging.info('Running %s' % type(self).__name__)
 
         accounting_alert = TelegramNotifier(
@@ -685,6 +692,7 @@ class MatchingThread(threading.Thread):
             df_matched = self.match_to_df()
 
             if self.check_mark_old_database_records_as_matched(df_matched):
+                logging.info('Marked old database records as matched.')
                 df_matched = self.match_to_df() # if new match marks were made, fetch dataframe again
 
             df_matched_with_discrepancies = df_matched[df_matched['xfer_match'] == False]
@@ -783,6 +791,8 @@ class MatchingThread(threading.Thread):
                 message += f"[Transaction on {row['destination_chain'].upper()}]({destination_link_prefix}{row['destination_tx']})\n"
                 logging.critical(message)
                 accounting_alert.send(message)
+
+            self.pg_conn.commit()
 
             time.sleep(self.interval_seconds)
 

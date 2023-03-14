@@ -198,10 +198,13 @@ class TelegramNotifier:
         """
         try:
             if self.check_add_message_to_recent_list(markdown):
-                base_url = f'https://api.telegram.org/bot{self.bot_key}/sendMessage'
-                data = {'chat_id': self.chat_id, 'parse_mode': 'markdown', 'disable_web_page_preview': 'true', 'text': markdown}
-                requests.post(base_url, data=data, timeout=10).json()
-                self.logging.info(f'Sent Telegram message: {markdown}')
+                if self.bot_key and self.chat_id: # if both bot key and chat id are configured
+                    base_url = f'https://api.telegram.org/bot{self.bot_key}/sendMessage'
+                    data = {'chat_id': self.chat_id, 'parse_mode': 'markdown', 'disable_web_page_preview': 'true', 'text': markdown}
+                    requests.post(base_url, data=data, timeout=10).json()
+                    self.logging.info(f'Sent Telegram message: {markdown}')
+                else:
+                    self.logging.info(f'Could not send Telegram message: {markdown}')
             return True
         except Exception as e:
             self.logging.error(f'Could not send Telegram message: {e}')

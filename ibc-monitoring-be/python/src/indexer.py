@@ -2,6 +2,7 @@
 from datetime import datetime, timedelta, date
 from dateutil import parser
 import json
+import sys
 import os
 import time
 import threading
@@ -37,6 +38,20 @@ TELEGRAM_ALERT_BOT_KEY=os.getenv('TELEGRAM_ALERT_BOT_KEY', None)
 TELEGRAM_ACCOUNTING_ALERT_CHAT_ID=int(os.getenv('TELEGRAM_ACCOUNTING_ALERT_CHAT_ID', 0))
 TELEGRAM_TECHNICAL_ALERT_CHAT_ID=int(os.getenv('TELEGRAM_TECHNICAL_ALERT_CHAT_ID', 0))
 LOGGING_LEVEL = os.getenv('LOGGING_LEVEL', 'INFO').upper()
+
+# checking configuration for appropriate input, mainly to prevent false positives warnings
+try:
+    assert ACTION_COLLECTION_START_TIME < datetime.utcnow()
+    assert ACTION_COLLECTION_QUERY_INTERVAL_SECONDS <= 90
+    assert ACTION_COLLECTION_REPOPULATION_QUERY_INTERVAL_SECONDS <= 30
+    assert MATCHING_START_TIME < datetime.utcnow()
+    assert MATCHING_START_TIME >= ACTION_COLLECTION_START_TIME
+    assert MATCHING_INTERVAL_SECONDS <= 30
+    assert LOGGING_LEVEL in ['DEBUG', 'INFO', 'WARNING', 'ERROR', 'CRITICAL']
+except:
+    print('INVALID CONFIGURATION - PLEASE FIX config.env!')
+    print(traceback.format_exc())
+    sys.exit(1)
 
 KEEP_RUNNING = True
 def stop_container():

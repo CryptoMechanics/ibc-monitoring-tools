@@ -1,4 +1,4 @@
-## IBC Monitoring Backend
+## IBC Token Monitor
 
 Indexes actions relating to the IBC Wraplock and Wraptoken contracts from multiple supported Antelope chains into a Postgresql database. It gathers data from the `get_actions` Hyperion API at a user-configurable interval, and is fork-tolerant. It also maintains a table reflecting the health of the Hyperion API endpoints.
 
@@ -7,7 +7,9 @@ It periodically matches the actions between chains to determine any instances wh
 1) There has been an issue, withdraw or cancel action - requiring a proof - without a corresponding event on the source chain
 2) The corresponding source and destination actions have different owner, beneficiary or quantity values
 
-In either event, it sends a discrepancy alert to the designated telegram group/channel.
+In either event, it sends an alert to the telegram group/channel specified in the config.env.
+
+In the event of one of the API dependencies is unreachable, or has other problems, it sends an alert to a separate technical telegram group/channel specified in the config.env.
 
 It also presents a basic HTTP API for viewing the matched and unmatched actions:
 
@@ -16,7 +18,7 @@ It also presents a basic HTTP API for viewing the matched and unmatched actions:
 /transfers-summary?fmt=html&start=2023-02-08T00:00:00&end=2023-02-09T00:00:00
 ```
 
-Complete API documentation may be found at `/docs` once deployed.
+API documentation may be found at `/docs` once deployed.
 
 ### Quickstart
 
@@ -50,8 +52,4 @@ TELEGRAM_TECHNICAL_ALERT_CHAT_ID - the chat_id for the telegram group/channel to
 LOGGING_LEVEL - `DEBUG`, `INFO` or `ERROR` depending on the level of detail
 ```
 
-The `chains.json` file stores the details of the Hyperion API endpoints for each chain, and the wraplock/token contract names for which actions are collected.
-
-### TODO
-
-- check that there there can never be false positives for discrepancy alerts
+The `chains.json` file stores the details of the Hyperion API endpoints for each chain, and the wraplock/wraptoken contract names for which actions are collected.

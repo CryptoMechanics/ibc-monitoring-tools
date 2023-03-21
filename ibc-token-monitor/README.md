@@ -7,9 +7,9 @@ It periodically matches the actions between chains to determine any instances wh
 1) There has been an issue, withdraw or cancel action - requiring a proof - without a corresponding event on the source chain
 2) The corresponding source and destination actions have different owner, beneficiary or quantity values
 
-In either event, it sends an alert to the telegram group/channel specified in the config.env.
+In either event, an alert is sent to the telegram group/channel specified in the config.env.
 
-In the event of one of the API dependencies is unreachable, or has other problems, it sends an alert to a separate technical telegram group/channel specified in the config.env.
+In the event that one of the API dependencies is unreachable, or has other problems, an alert is sent to a separate technical telegram group/channel also specified in the config.env.
 
 It also presents a basic HTTP API providing:
 
@@ -51,7 +51,7 @@ TELEGRAM_ALERT_BOT_KEY - telegram bot key used to send the discrepancy alerts
 TELEGRAM_ACCOUNTING_ALERT_CHAT_ID - the chat_id for the telegram group/channel to send token accounting alerts
 TELEGRAM_TECHNICAL_ALERT_CHAT_ID - the chat_id for the telegram group/channel to send technical alerts (API outages etc.)
 
-LOGGING_LEVEL - `DEBUG`, `INFO` or `ERROR` depending on the level of detail
+LOGGING_LEVEL - `DEBUG`, `INFO`, 'WARNING, `ERROR` or 'CRITICAL' depending on the logs required
 ```
 
 The `chains.json` file stores the details of the Hyperion API endpoints for each chain, and the wraplock/wraptoken contract names for which actions are collected.

@@ -11,14 +11,16 @@ In either event, it sends an alert to the telegram group/channel specified in th
 
 In the event of one of the API dependencies is unreachable, or has other problems, it sends an alert to a separate technical telegram group/channel specified in the config.env.
 
-It also presents a basic HTTP API for viewing the matched and unmatched actions:
+It also presents a basic HTTP API providing:
 
 ```
+/discrepancies
 /transfers?fmt=json&start=2023-02-08T00:00:00&end=2023-02-09T00:00:00
 /transfers-summary?fmt=html&start=2023-02-08T00:00:00&end=2023-02-09T00:00:00
+/indexer-health-status
 ```
 
-API documentation may be found at `/docs` once deployed.
+Full API documentation may be found at `/docs` once deployed.
 
 ### Quickstart
 

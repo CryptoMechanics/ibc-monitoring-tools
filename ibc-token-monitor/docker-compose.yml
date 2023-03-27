@@ -8,6 +8,7 @@ services:
     image: antelope/ibc-monitor-python:1
     volumes:
       - ./python:/usr/src/app
+      - ./chains.json:/usr/src/app/chains.json
     env_file:
       - ./config.env
     command: ["uvicorn", "src.api:app", "--host", "0.0.0.0", "--reload", "--reload-dir", "src"]

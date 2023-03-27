@@ -12,13 +12,18 @@ import pandas as pd
 from fastapi import Depends, FastAPI, HTTPException, WebSocket
 from fastapi.responses import Response, HTMLResponse, JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
+import asyncpg
 
 # project imports
 from src.utils import load_dataframe, load_json
 
+POSTGRES_USER = os.getenv('POSTGRES_USER', '')
+POSTGRES_PASSWORD = os.getenv('POSTGRES_PASSWORD', '')
+POSTGRES_DB = os.getenv('POSTGRES_DB', '')
 ACTION_COLLECTION_START_TIME = parser.parse(os.getenv('ACTION_COLLECTION_START_TIME', '2023-01-01'))
 MATCHING_START_TIME = parser.parse(os.getenv('MATCHING_START_TIME', '2023-01-01'))
 LOGGING_LEVEL = os.getenv('LOGGING_LEVEL', 'INFO').upper()
+SECRET_KEY = os.getenv('SECRET_KEY', None)
 
 # logging configuration
 logging.basicConfig(
@@ -61,6 +66,38 @@ app = FastAPI(
 #     allow_methods=["*"],
 #     allow_headers=["*"],
 # )
+
+
+@app.get('/trigger-unmatched-proof-alert', tags=['Default Page'])
+async def trigger_unmatched_proof_alert(fmt: str = 'json', secret_key: str = ''):
+	"""
+	An endpoint for adding a spurious unmatched proof to the database as a trigger to check the accounting alerts work as expected.
+	"""
+
+	if not SECRET_KEY:
+		raise HTTPException(status_code=403, detail='No SECRET_KEY is configured in config.env')
+
+	if secret_key != SECRET_KEY:
+		raise HTTPException(status_code=403, detail='secret_key does not match SECRET_KEY in config.env')
+
+	# get table name for first chain in chains.json
+	with open('chains.json', 'r') as chains_file:
+		chains = json.load(chains_file)
+		chain, _ = list(chains.items())[0]
+		table_name = f'actions_{chain}'
+
+	conn = await asyncpg.connect(user=POSTGRES_USER, password=POSTGRES_PASSWORD, database=POSTGRES_DB, host='database')
+	try:
+		await conn.execute(f"""INSERT INTO {table_name} (
+				global_sequence_id, tx, time, source_chain, destination_chain, action, owner, beneficiary, contract, symbol, quantity, xfer_global_sequence_id
+				) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)""",
+				12345678987654321, 'test_unmatched_proof_tx', datetime.utcnow(), chain, chain, 'issuea', 'owner', 'beneficiary', 'contract', 'symbol', 0.1234, 12345678987654321
+			)
+	finally:
+		await conn.close()
+
+	return {'detail': f'Added unmatched proof to {chain}_actions table'}
+
 
 @app.get('/', tags=['Default Page'])
 async def index():

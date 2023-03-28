@@ -18,6 +18,7 @@ It also presents a basic HTTP API providing:
 /transfers?fmt=json&start=2023-02-08T00:00:00&end=2023-02-09T00:00:00
 /transfers-summary?fmt=html&start=2023-02-08T00:00:00&end=2023-02-09T00:00:00
 /indexer-health-status
+/trigger-unmatched-proof-alert?secret_key=abcdefg1
 ```
 
 Full API documentation may be found at `/docs` once deployed.

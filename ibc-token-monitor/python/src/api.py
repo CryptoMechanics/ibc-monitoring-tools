@@ -5,6 +5,7 @@ import json, typing
 from datetime import datetime, timedelta
 from decimal import Decimal
 from dateutil import parser
+import asyncio
 
 # external library imports
 import simplejson as json
@@ -68,11 +69,13 @@ app = FastAPI(
 # )
 
 
-@app.get('/trigger-unmatched-proof-alert', tags=['Default Page'])
+@app.get('/trigger-unmatched-proof-alert', tags=['General Data'])
 async def trigger_unmatched_proof_alert(fmt: str = 'json', secret_key: str = ''):
 	"""
 	An endpoint for adding a spurious unmatched proof to the database as a trigger to check the accounting alerts work as expected.
 	"""
+
+	await asyncio.sleep(1)
 
 	if not SECRET_KEY:
 		raise HTTPException(status_code=403, detail='No SECRET_KEY is configured in config.env')

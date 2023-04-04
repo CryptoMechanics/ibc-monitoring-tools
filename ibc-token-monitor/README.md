@@ -46,7 +46,7 @@ ACTION_COLLECTION_QUERY_INTERVAL_SECONDS - how often to poll Hyperion API for re
 ACTION_COLLECTION_REPOPULATION_QUERY_INTERVAL_SECONDS - how often to poll Hyperion API for historic actions when catching up
 
 MATCHING_START_TIME - chain date/time (e.g. yyyy-mm-dd) at which to start matching actions and checks for discrepancies
-MATCHING_INTERVAL_SECONDS=5 - how often to carry out the action matching process
+MATCHING_INTERVAL_SECONDS - how often to carry out the action matching process
 
 TELEGRAM_ALERT_BOT_KEY - telegram bot key used to send the discrepancy alerts
 TELEGRAM_ACCOUNTING_ALERT_CHAT_ID - the chat_id for the telegram group/channel to send token accounting alerts

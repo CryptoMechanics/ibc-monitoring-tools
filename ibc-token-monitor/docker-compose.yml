@@ -18,6 +18,7 @@ services:
       - database
 
   indexer:
+    restart: always
     build: ./python
     image: antelope/ibc-monitor-python:1
     volumes:

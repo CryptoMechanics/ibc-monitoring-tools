@@ -156,8 +156,59 @@ async def index():
 	if len(df_successful_transfers_summary.index) > 0:
 		df_successful_transfers_summary['quantity'] = df_successful_transfers_summary['quantity'].apply(lambda x: '{:,.4f}'.format(x))
 		df_successful_transfers_summary['count'] = df_successful_transfers_summary['count'].apply(lambda x: str(int(x)))
-		html2 += '<h2>Successful Transfers Summary</h2>'
-		html2 += df_successful_transfers_summary.to_html(index=True, float_format='{:.4f}'.format) + '<br>'
+		html2 += """<h2>Successful Transfers Summary</h2>"""
+		html2 += df_successful_transfers_summary.to_html(index=True, float_format='{:.4f}'.format)
+		html2 += """
+			<span class="tooltip">(column guide)<span class="tooltiptext">
+			..................................................................COLUMN GUIDE..................................................................
+				<table class="helptable">
+					<tr>
+						<td class="helpkeycolumn">
+							source_chain
+						</td><td>
+							The chain from which the token transfer was initiated.
+						</td>
+					</tr>
+					<tr></tr>
+					<tr>
+						<td class="helpkeycolumn">
+							destination_chain
+						</td><td>
+							The chain on which the transfer action was proven.
+						</td>
+					</tr>
+					<tr>
+						<td class="helpkeycolumn">
+							source_action
+						</td><td>
+							The action on the source chain which started the transfer.
+							A lock action prevents the assets from being moved on the native chain whilst a retire action removes wrapped tokens from the non-native chain, so they may be safely unlocked on the native chain.
+						</td>
+					</tr>
+					<tr>
+						<td class="helpkeycolumn">
+							symbol
+						</td><td>
+							The symbol for the asset that was transferred.
+						</td>
+					</tr>
+					<tr>
+						<td class="helpkeycolumn">
+							quantity
+						</td><td>
+							The amount of tokens that have been transferred.
+						</td>
+					</tr>
+					<tr>
+						<td class="helpkeycolumn">
+							count
+						</td><td>
+							The number of transfers that have been completed.
+						</td>
+					</tr>
+				</table>
+			</span></span>
+			"""
 	else:
 		html2 += '<h2>No Successful Transfers</h2>'
 
@@ -166,18 +217,128 @@ async def index():
 		df_outstanding_transfers_summary['quantity'] = df_outstanding_transfers_summary['quantity'].apply(lambda x: '{:,.4f}'.format(x))
 		df_outstanding_transfers_summary['count'] = df_outstanding_transfers_summary['count'].apply(lambda x: str(int(x)))
 		html3 += '<h2>Outstanding Transfers Summary</h2>'
-		html3 += df_outstanding_transfers_summary.to_html(index=True) + '<br>'
+		html3 += df_outstanding_transfers_summary.to_html(index=True, float_format='{:.4f}'.format)
+		html3 += """
+			<span class="tooltip">(column guide)<span class="tooltiptext">
+			..................................................................COLUMN GUIDE..................................................................
+				<table class="helptable">
+					<tr>
+						<td class="helpkeycolumn">
+							source_chain
+						</td><td>
+							The chain from which the token transfer was initiated.
+						</td>
+					</tr>
+					<tr></tr>
+					<tr>
+						<td class="helpkeycolumn">
+							destination_chain
+						</td><td>
+							The chain on which the 1st stage transfer action may be proven to complete the transfer.
+						</td>
+					</tr>
+					<tr>
+						<td class="helpkeycolumn">
+							source_action
+						</td><td>
+							The action on the source chain which started the transfer.
+							A lock action prevents the assets from being moved on the native chain whilst a retire action removes wrapped tokens from the non-native chain, so they may be safely unlocked on the native chain.
+						</td>
+					</tr>
+					<tr>
+						<td class="helpkeycolumn">
+							symbol
+						</td><td>
+							The symbol for the asset that is being transferred.
+						</td>
+					</tr>
+					<tr>
+						<td class="helpkeycolumn">
+							quantity
+						</td><td>
+							The amount of tokens that are being transferred.
+						</td>
+					</tr>
+					<tr>
+						<td class="helpkeycolumn">
+							count
+						</td><td>
+							The number of transfers that have been started, but not yet completed.
+						</td>
+					</tr>
+				</table>
+			</span></span>
+			"""
 	else:
 		html3 += '<h2>No Outstanding Transfers</h2>'
 
 	html4 = ''
 	if len(df_successful_transfers_ratio_summary.index) > 0:
 		html4 += '<h2>Transfer Success Ratios</h2>'
-		html4 += df_successful_transfers_ratio_summary.to_html(index=True, float_format='{:.1%}'.format) + '<br>'
+		html4 += df_successful_transfers_ratio_summary.to_html(index=True, float_format='{:.1%}'.format)
+		html4 += """
+			<span class="tooltip">(column guide)<span class="tooltiptext">
+			..................................................................COLUMN GUIDE..................................................................
+				<table class="helptable">
+					<tr>
+						<td class="helpkeycolumn">
+							source_chain
+						</td><td>
+							The chain on which the token transfer was initiated.
+						</td>
+					</tr>
+					<tr></tr>
+					<tr>
+						<td class="helpkeycolumn">
+							destination_chain
+						</td><td>
+							The chain on which the transfer action was, or may be, proven.
+						</td>
+					</tr>
+					<tr>
+						<td class="helpkeycolumn">
+							source_action
+						</td><td>
+							The action on the source chain which started the transfer.
+							A lock action prevents the assets from being moved on the native chain whilst a retire action removes wrapped tokens from the non-native chain, so they may be safely unlocked on the native chain.
+						</td>
+					</tr>
+					<tr>
+						<td class="helpkeycolumn">
+							symbol
+						</td><td>
+							The symbol for the asset that was, or is being, transferred.
+						</td>
+					</tr>
+					<tr>
+						<td class="helpkeycolumn">
+							quantity
+						</td><td>
+							The number of tokens that have been successfully transferred to the destination chain, as a proportion of the number of tokens for which a transfer has been initiated on the source chain.
+						</td>
+					</tr>
+					<tr>
+						<td class="helpkeycolumn">
+							count
+						</td><td>
+							The number of transfers that have been successfully completed, as a proportion of the number of transfers which have been initiated on the source chain.
+						</td>
+					</tr>
+				</table>
+				<table>
+					<tr>
+						<td style="text-align: center">
+							<i>A value of less than 100% does not indicate any problem, simply that there are outstanding transfers yet to be completed, or which may be cancelled.</i>
+						</td>
+					</tr>
+				</table>
+			</span></span>
+			"""
 
 	outer_html = """
 	<html>
 		<head>
+			<meta name="viewport" content="width=device-width, initial-scale=1.0">
 			<title>Antelope IBC Token Monitor</title>
 			<meta name="description" content="">
 			<style>
@@ -228,6 +389,49 @@ async def index():
 					text-align: center;
 					padding: 3px;
 					font-size: 14px;
+				}
+
+				.tooltip {
+					color: #a00;
+					font-style: italic;
+					font-size: 0.8em;
+					position: relative;
+					display: inline-block;
+					cursor: pointer;
+				}
+
+				.tooltip .tooltiptext {
+					font-style: normal;
+					visibility: hidden;
+					background-color: #fff;
+					text-align: center;
+					border-radius: 6px;
+					box-shadow: 0 5px 10px rgba(0,0,0,0.1);
+					padding: 10px;
+					position: absolute;
+					z-index: 1;
+					top: 125%; /* Position the tooltip above the text */
+					left: 50%;
+					transform: translateX(-50%); /* Center the tooltip */
+					opacity: 0;
+					transition: opacity 0.3s;
+					white-space: nowrap;
+					border: 1px solid #777;
+				}
+
+				.tooltip:hover .tooltiptext {
+					visibility: visible;
+					opacity: 1;
+				}
+
+				.helpkeycolumn {
+					text-align: right;
+					vertical-align: top;
+				}
+
+				.helptable td {
+					border: 1px solid black;
+					padding: 5px;
 				}
 			</style>
 		</head>

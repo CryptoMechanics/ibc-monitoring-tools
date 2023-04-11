@@ -676,14 +676,14 @@ class MatchingThread(threading.Thread):
             bot_key=TELEGRAM_ALERT_BOT_KEY,
             chat_id=TELEGRAM_ACCOUNTING_ALERT_CHAT_ID,
             logging=logging,
-            duplicates_suppressed_seconds=120
+            duplicates_suppressed_seconds=300
             )
 
         technical_alert = TelegramNotifier(
             bot_key=TELEGRAM_ALERT_BOT_KEY,
             chat_id=TELEGRAM_TECHNICAL_ALERT_CHAT_ID,
             logging=logging,
-            duplicates_suppressed_seconds=300
+            duplicates_suppressed_seconds=600
             )
 
 

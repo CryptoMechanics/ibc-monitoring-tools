@@ -16,5 +16,11 @@
 		"block_explorer_tx_link_prefix": "https://ajor.io/transaction/",
 		"wraplock_accounts": ["ibc.wl.ux","ibc.wl.eos","ibc.wl.wax"],
 		"wraptoken_accounts": ["ibc.wt.ux","ibc.wt.eos","ibc.wt.wax"]
+	},
+	"wax": {
+		"api_endpoint": "https://wax.eosusa.io",
+		"block_explorer_tx_link_prefix": "https://wax.bloks.io/transaction/",
+		"wraplock_accounts": ["ibc.wl.ux","ibc.wl.eos","ibc.wl.tlos"],
+		"wraptoken_accounts": ["ibc.wt.ux","ibc.wt.eos","ibc.wt.tlos"]
 	}
 }

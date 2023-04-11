@@ -225,7 +225,7 @@ class ActionCollectionThread(threading.Thread):
 
                     # handle errors from Hyperion API where no JSON is returned
                     if response.status_code != 200:
-                        msg = f'Action data server {self.api_endpoint} responded with {response.status_code} error.'
+                        msg = f'Action data server {self.api_endpoint}/v2/health responded with {response.status_code} error.'
                         raise IndexerHealthException(msg)
 
                     response = response.json()

@@ -222,9 +222,15 @@ class ActionCollectionThread(threading.Thread):
 
                     logging.debug(f'Checking health of Hyperion {self.api_endpoint} ...')
                     response = requests.get(f'{self.api_endpoint}/v2/health', timeout=10)
+
+                    # handle errors from Hyperion API where no JSON is returned
+                    if response.status_code != 200:
+                        msg = f'Action data server {self.api_endpoint} responded with {response.status_code} error.'
+                        raise IndexerHealthException(msg)
+
                     response = response.json()
 
-                    # handle errors from Hyperion API
+                    # handle errors from Hyperion API within JSON response
                     if 'error' in response:
                         msg = f'Action data server {self.api_endpoint}: {response["message"]}'
                         raise IndexerHealthException(msg)
@@ -235,8 +241,8 @@ class ActionCollectionThread(threading.Thread):
                     if (datetime.utcnow() - nodeos_head_time) > timedelta(seconds=15):
                         msg = f'Action data server {self.api_endpoint} head block is more than 15 seconds behind system time.'
                         raise IndexerHealthException(msg)
-                    if (nodeos_head_block - elasticsearch_last_indexed_block) > 10:
-                        msg = f'Action data server {self.api_endpoint} is more than 5 seconds out of sync.'
+                    if (nodeos_head_block - elasticsearch_last_indexed_block) > 20:
+                        msg = f'Action data server {self.api_endpoint} is more than 10 seconds out of sync.'
                         raise IndexerHealthException(msg)
 
                     logging.debug(f'Getting actions from Hyperion {self.api_endpoint} ...')
@@ -670,14 +676,14 @@ class MatchingThread(threading.Thread):
             bot_key=TELEGRAM_ALERT_BOT_KEY,
             chat_id=TELEGRAM_ACCOUNTING_ALERT_CHAT_ID,
             logging=logging,
-            duplicates_suppressed_seconds=90
+            duplicates_suppressed_seconds=120
             )
 
         technical_alert = TelegramNotifier(
             bot_key=TELEGRAM_ALERT_BOT_KEY,
             chat_id=TELEGRAM_TECHNICAL_ALERT_CHAT_ID,
             logging=logging,
-            duplicates_suppressed_seconds=90
+            duplicates_suppressed_seconds=300
             )
 
 

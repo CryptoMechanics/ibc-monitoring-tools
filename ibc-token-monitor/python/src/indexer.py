@@ -390,7 +390,7 @@ class ActionCollectionThread(threading.Thread):
 
         try:
             self.pg_cur.execute(f"""
-                CREATE TABLE IF NOT EXISTS {self.base_table_name}_meta (
+                CREATE TABLE {self.base_table_name}_meta (
                         last_irreversible_action_time timestamp,
                         last_irreversible_global_sequence_id bigint,
                         lib bigint
@@ -399,9 +399,12 @@ class ActionCollectionThread(threading.Thread):
                     VALUES ('{self.start_time.strftime('%Y-%m-%d %H:%M:%S')}', 0, 0);
                 """)
             self.pg_conn.commit()
-            logging.info('Created meta table if not present.')
+            logging.info('Created meta table.')
         except psycopg2.Error as e:
-            logging.error(f"Error creating meta table: {e}")
+            if e.pgcode == '42P07':
+                logging.info('Meta table already present.')
+            else:
+                logging.error(f"Error creating meta table: {e}")
             self.pg_conn.rollback()
 
     def dropDBTables(self) -> None:

@@ -42,6 +42,26 @@ def xfer_data_to_dict(data: dict) -> dict:
         'beneficiary': data['xfer']['beneficiary']
         }
 
+# mitigation to patch bug in ueosio regarding account names with leading dots
+class MyDataStream(DataStream):
+    def unpack_name(self):
+        return self.unpack_account_name()
+
+    def unpack_account_name(self):
+        return self.name_to_string(super().unpack_uint64())
+
+    def name_to_string(self, n, strip_dots=True):
+        charmap = ".12345abcdefghijklmnopqrstuvwxyz"
+        s = bytearray(13 * b'.')
+        tmp = n
+        for i in range(13):
+            c = charmap[tmp & (0x0f if i == 0 else 0x1f)]
+            s[12 - i] = ord(c)
+            tmp >>= (4 if i == 0 else 5)
+        s = s.decode('utf8')
+        if strip_dots:
+            s = s.rstrip('.') # changed this to strip only right dots
+        return s
 
 def unpack_emitxfer_action(hex_data: str, as_dict: bool = False) -> dict:
     """
@@ -53,7 +73,7 @@ def unpack_emitxfer_action(hex_data: str, as_dict: bool = False) -> dict:
     """
 
     data = bytes.fromhex(hex_data)
-    ds = DataStream(data)
+    ds = MyDataStream(data)
     owner = ds.unpack_name()
     quantity = dict(ds.unpack_extended_asset())
     beneficiary = ds.unpack_name()
